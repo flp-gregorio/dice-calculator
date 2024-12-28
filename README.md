@@ -4,7 +4,8 @@ A simple dice roll calculator application built using **PyQt5** and **Matplotlib
 
 ## Features
 
-- **Chance to Hit**: Input the chance to hit in percentage.
+- **Enemy's AC**: Customize the enemy armor class value.
+- **Weapon Hit Die**: Custom weapon hit dice (e.g., `1d20`).
 - **Advantage**: Option to account for advantage when rolling.
 - **Chance Modifiers**: Add modifiers to the chance to hit (e.g., +10).
 - **Damage Dice**: Specify the damage dice (e.g., `1d10`).
@@ -13,11 +14,12 @@ A simple dice roll calculator application built using **PyQt5** and **Matplotlib
 
 ## Requirements
 
-- Python 3.x
+- Python 3.7+
 
 ## Usage
 
-1. **Chance to Hit**: Enter the chance to hit as a percentage (e.g., 65 for 65%).
+- **Enemy's AC**: Enter the enemy's armor class.
+- **Weapon Hit Die**: Enter the weapon hit die (e.g., `1d20`).
 2. **Advantage**: Check the box if you have advantage on the roll.
 3. **Chance Modifiers**: Enter any chance modifiers (e.g., `+5,-2`) separated by commas.
 4. **Damage Dice**: Enter the damage die (e.g., `1d10`).
@@ -28,7 +30,8 @@ The program will calculate and display the **Chance to Hit** and **Average Damag
 
 ## Example
 
-- **Chance to Hit**: 65%
+- **Enemy's AC**: 16
+- **Weapon Hit Die**: 1d20
 - **Has Advantage**: Checked
 - **Chance Modifiers**: `+5`
 - **Damage Die**: `1d10`
@@ -36,8 +39,8 @@ The program will calculate and display the **Chance to Hit** and **Average Damag
 
 ### Output
 
-- **Chance to Hit**: 77%
-- **Average Damage**: 8
+- **Chance to Hit**: 75%
+- **Average Damage**: 6
 
 Additionally, a bar chart will display the probability distribution of damage rolls.
 
