@@ -4,6 +4,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, QLineEdit, QPushButton, QCheckBox
 )
+from scipy.stats import gaussian_kde
 
 class DiceCalculator(QMainWindow):
     def __init__(self):
@@ -14,10 +15,15 @@ class DiceCalculator(QMainWindow):
         layout = QVBoxLayout()
 
         # Inputs
-        self.hitchance_label = QLabel("Chance to hit (e.g., 65 for 65%):")
-        layout.addWidget(self.hitchance_label)
-        self.hitchance_input = QLineEdit(self)
-        layout.addWidget(self.hitchance_input)
+        self.enemy_ac_label = QLabel("Enemy AC:")
+        layout.addWidget(self.enemy_ac_label)
+        self.enemy_ac_input = QLineEdit(self)
+        layout.addWidget(self.enemy_ac_input)
+
+        self.weapon_hitdie_label = QLabel("Weapon Hit Die (e.g., 1d20):")
+        layout.addWidget(self.weapon_hitdie_label)
+        self.weapon_hitdie_input = QLineEdit(self)
+        layout.addWidget(self.weapon_hitdie_input)
 
         self.advantage_label = QCheckBox("Has advantage")
         layout.addWidget(self.advantage_label)
@@ -60,34 +66,40 @@ class DiceCalculator(QMainWindow):
         self.setCentralWidget(container)
 
     def calculate_average(self):
-        hitchance = self.hitchance_input.text().strip()
+        enemy_ac = self.enemy_ac_input.text().strip()
+        weapon_hitdie = self.weapon_hitdie_input.text().strip()
         hasadvantage = self.advantage_label.isChecked()
         hitchancemod = self.hitchancemod_input.text().strip()
         dmgdice = self.dmgdice_input.text().strip()
         dmgmodifier = self.dmgmodifier_input.text().strip()
 
         try:
-            # Parse chance to hit
-            hitchance = int(hitchance)
-            if hitchance < 1 or hitchance > 100:
-                raise ValueError("Invalid hit chance.")
+            # Parse enemy AC
+            enemy_ac = int(enemy_ac)
+
+            # Parse weapon hit die (e.g., "1d20")
+            if "d" not in weapon_hitdie:
+                raise ValueError("Invalid weapon hit die format.")
+            num_hitdie, sides_hitdie = map(int, weapon_hitdie.split("d"))
+
+            # Calculate base chance to hit
+            base_hit_chance = (sides_hitdie - (enemy_ac - 1)) / sides_hitdie
 
             # Apply chance modifiers (only if not empty)
             if hitchancemod:
                 hitchancemod = sum(map(float, hitchancemod.split(",")))
-                hitchance += hitchancemod * 5
-            hitchance = min(max(hitchance, 0), 100)  # Clamp to [0, 100]
+                base_hit_chance += hitchancemod / sides_hitdie
+            base_hit_chance = min(max(base_hit_chance, 0), 1)  # Clamp to [0, 1]
 
             # Apply advantage (if checked)
-            hitchance /= 100  # Normalize hit chance to decimal
             if hasadvantage:
-                hitchance = hitchance + (1 - hitchance) * hitchance  # Advantage formula
+                base_hit_chance = base_hit_chance + (1 - base_hit_chance) * base_hit_chance  # Advantage formula
 
             # Parse damage dice (e.g., "1d10")
             if "d" not in dmgdice:
-                raise ValueError("Invalid dice format.")
-            num, sides = map(int, dmgdice.split("d"))
-            avg_dmgroll = (num * (1 + sides)) / 2  # Average roll for each die
+                raise ValueError("Invalid damage dice format.")
+            num_dmgdie, sides_dmgdie = map(int, dmgdice.split("d"))
+            avg_dmgroll = (num_dmgdie * (1 + sides_dmgdie)) // 2  # Average roll for each die (rounded down)
 
             # Parse damage modifiers (only if not empty)
             if dmgmodifier:
@@ -99,54 +111,49 @@ class DiceCalculator(QMainWindow):
                 dmgmodifier = 0  # Default to 0 if no modifier is provided
 
             # Calculate and display result
-            total_avg = avg_dmgroll + dmgmodifier
-            self.result1_label.setText(f"Chance to Hit: {hitchance:.0%}")
-            self.result_label.setText(f"Average Damage: {total_avg:.0f}")
+            total_avg = int(base_hit_chance * (avg_dmgroll + dmgmodifier))  # Round down
+            self.result1_label.setText(f"Chance to Hit: {base_hit_chance:.0%}")
+            self.result_label.setText(f"Average Damage: {total_avg}")
 
             # Plot the damage distribution graph
-            self.plot_damage_distribution(num, sides, dmgmodifier)
+            self.plot_damage_distribution(num_dmgdie, sides_dmgdie, dmgmodifier, base_hit_chance)
 
         except Exception as e:
             self.result_label.setText(f"Error: {str(e)}")
 
-    def plot_damage_distribution(self, num, sides, modifier):
-        # Plots a bar chart for the damage distribution.
-        max_damage = num * sides + modifier
-        rolls = np.arange(num, max_damage + 1)
-    
+    def plot_damage_distribution(self, num, sides, modifier, hit_chance):
         # Simulate the damage rolls
         simulated_rolls = np.random.randint(1, sides + 1, size=(10000, num))
         total_rolls = simulated_rolls.sum(axis=1) + modifier
+        hit_rolls = total_rolls[np.random.rand(10000) < hit_chance]
         
-        # Calculate probabilities for each possible damage value
-        probabilities = [np.sum(total_rolls == r) / 10000 * 100 for r in rolls]  # Convert to percentage
-
-        # Calculate mean and standard deviation of the damage distribution
-        mean = np.mean(total_rolls)
-        std_dev = np.std(total_rolls)
-
         # Clear previous figure
         self.figure.clear()
         ax = self.figure.add_subplot(111)
 
-        # Plot the bar chart
-        ax.bar(rolls, probabilities, width=0.8, label="Damage Distribution")
+        # Fit a kernel density estimation to smooth the curve
+        kde = gaussian_kde(hit_rolls, bw_method=0.5)  # Bandwidth adjusts smoothness
+        x_vals = np.linspace(hit_rolls.min(), hit_rolls.max(), 500)
+        y_vals = kde(x_vals)
 
-        # Add a vertical line for the mean
-        ax.axvline(mean, color="r", linestyle="--", label=f"Mean: {mean:.2f}")
-        
-        # Set Y-axis ticks in steps of 2.5
-        ax.set_yticks(np.arange(0, 12.5, 2.5))  # Y-axis from 0 to 100, in steps of 2.5
+        # Plot the smoothed curve
+        ax.plot(x_vals, y_vals, label="Damage Distribution", color="blue")
+
+        # Add mean and standard deviation lines
+        mean = np.mean(hit_rolls)
+        std_dev = np.std(hit_rolls)
+        ax.axvline(mean, color="red", linestyle="--", label=f"Mean: {mean:.2f}")
+        ax.axvline(mean + std_dev, color="green", linestyle=":", label=f"Std Dev: {std_dev:.2f}")
+        ax.axvline(mean - std_dev, color="green", linestyle=":", label="")
 
         # Set chart labels and title
-        ax.set_title("Damage Distribution")
+        ax.set_title("Damage Distribution (Normalized)")
         ax.set_xlabel("Damage")
-        ax.set_ylabel("%")  # Y-axis label
+        ax.set_ylabel("Probability Density")
         ax.legend()
 
         # Redraw the canvas
         self.canvas.draw()
-
 
 if __name__ == "__main__":
     app = QApplication([])
