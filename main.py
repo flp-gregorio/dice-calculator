@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel, QLineEdit, QPushButton, QCheckBox
 )
 from scipy.stats import gaussian_kde
+import mplcursors
 
 class DiceCalculator(QMainWindow):
     def __init__(self):
@@ -127,29 +128,33 @@ class DiceCalculator(QMainWindow):
         self.figure.clear()
         ax = self.figure.add_subplot(111)
 
-        # Fit a kernel density estimation
-        kde = gaussian_kde(hit_rolls, bw_method=0.5)
-        x_vals = np.linspace(hit_rolls.min(), hit_rolls.max(), 500)
-        y_vals = kde(x_vals)
+        # Calculate the frequency of each damage value
+        unique_damage, counts = np.unique(hit_rolls, return_counts=True)
 
-        # Plot the smoothed curve
-        ax.plot(x_vals, y_vals, label="Damage Distribution", color="blue")
+        # Normalize the counts to get probability percentages
+        probabilities = counts / len(hit_rolls) * 100  # Convert to percentage
+
+        # Plot a bar graph
+        bars = ax.bar(unique_damage, probabilities, color='red', width=0.7, edgecolor='red')
 
         # Add mean and standard deviation lines
         mean = int(np.mean(hit_rolls))
         std_dev = int(np.std(hit_rolls))
-        ax.axvline(mean, color="red", linestyle="--", label=f"Mean: {mean}")
-        ax.axvline(mean + std_dev, color="green", linestyle=":", label=f"Std Dev: {std_dev}")
-        ax.axvline(mean - std_dev, color="green", linestyle=":", label="")
 
         # Set chart labels and title
-        ax.set_title("Damage Distribution (Normalized)")
+        ax.set_title("Damage Roll Probability Distribution")
         ax.set_xlabel("Damage")
-        ax.set_ylabel("Probability Density")
+        ax.set_ylabel("")  # Hide the y-axis label
         ax.legend()
+
+        # Add hover functionality to show the x damage and y% chance
+        mplcursors.cursor(bars, hover=True).connect(
+            "add", lambda sel: sel.annotation.set_text(f"Damage: {int(sel.target[0])}, Chance: {sel.target[1]:.2f}%")
+        )
 
         # Redraw the canvas
         self.canvas.draw()
+
 
 if __name__ == "__main__":
     app = QApplication([])
